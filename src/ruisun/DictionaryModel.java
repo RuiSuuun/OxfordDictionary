@@ -3,6 +3,11 @@ package ruisun;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
+import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoClients;
+import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoDatabase;
+import org.bson.Document;
 
 import java.io.*;
 import java.net.HttpURLConnection;
@@ -11,6 +16,15 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 
 public class DictionaryModel {
+    MongoDatabase mgdatabase = null;
+    MongoCollection<Document> logs = null;
+
+    public DictionaryModel() {
+        MongoClient mongoClient = MongoClients.create("mongodb+srv://ruisun:mongodb123@cluster0.ruvfo.mongodb.net/<dbname>?retryWrites=true&w=majority");
+        mgdatabase = mongoClient.getDatabase("DistributedSystems");
+        logs = mgdatabase.getCollection("api-logs");
+    }
+
     /*
      * Search Flickr.com for the searchTerm argument, and return a Bitmap that can be put in an ImageView
      */
@@ -28,6 +42,7 @@ public class DictionaryModel {
         connection.setRequestProperty("accept", "application/json");
         connection.setRequestProperty("app_id", "ab20e008");
         connection.setRequestProperty("app_key", "deb2417a7c88c711830f0b0fb67c7c1f");
+        recordRequest(connection);
 
         // This line makes the request
         try {
@@ -40,6 +55,7 @@ public class DictionaryModel {
                 response += str;
             }
             in.close();
+            recordResponse(connection, response);
             return parse(response);
         } catch (FileNotFoundException e) {
             return null;
@@ -80,6 +96,27 @@ public class DictionaryModel {
             ans[i] = (i + 1) + ". " + definitions.get(i);
         }
         return ans;
+    }
+
+    private void recordRequest(HttpURLConnection connection) {
+        Document log = new Document("time", System.currentTimeMillis()).append("log-type", "request");
+        int i = 0;
+        String res = connection.getHeaderFieldKey(i);
+        while (res != null) {
+            log.append(res, connection.getHeaderField(i));
+            i += 1;
+            res = connection.getHeaderFieldKey(i);
+        }
+        logs.insertOne(log);
+    }
+
+    private void recordResponse(HttpURLConnection connection, String content) throws IOException {
+        Document log = new Document("time", System.currentTimeMillis()).append("log-type", "response");
+        log.append("method", connection.getRequestMethod());
+        log.append("code", connection.getResponseCode());
+        log.append("message", connection.getResponseMessage());
+        log.append("content", content);
+        logs.insertOne(log);
     }
 
 }
